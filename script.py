@@ -545,37 +545,6 @@ def get_questions():
     """Endpoint to get the list of questions"""
     return jsonify(scorer.questions), 200
 
-# Example usage when run directly
 if __name__ == "__main__":
-    # Example assessment data matching the schema from document 1
-    # Using the exact response values expected by the system
-    sample_assessment = {
-        "timestamp": datetime.now().isoformat(),
-        "patient": {
-            "email": "patient@example.com",
-            "name": "John Doe",
-            "age": "75",
-            "gender": "Male",
-            "previous_tier": "Independent"
-        },
-        "responses": {
-            "fall_risk": "High",
-            "medication_adherence": "Poor (Below 65%)",
-            "cognitive_function": "Severe Impairment (0-9)",
-            "uti_risk": "High Risk",
-            "balance_test": "Poor (Below 25 seconds)",
-            "driving_safety": "Unsafe to Drive",
-            "nighttime_movement": "Concerning Patterns",
-            "social_engagement": "Socially Isolated",
-            "toilet_flush_count": "Very High (17+ times)"
-        }
-    }
-    
-    # Process the sample assessment
-    print("Processing sample assessment...")
-    result = scorer.process_assessment(sample_assessment)
-    print("Result:", json.dumps(result, indent=2))
-    
-    # Run the Flask server
-    print("\nStarting Remote Home Check Scorer server...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
