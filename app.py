@@ -432,7 +432,7 @@ class RemoteHomeCheckScorer:
             msg['From'] = "bram@remotehomecheck.com"
             msg['To'] = to_email
             msg['Subject'] = subject
-            msg['Reply-To'] = to_email
+            msg['Reply-To'] = "bramwelsavage@gmail.com"
             
             msg.attach(MIMEText(body, 'plain'))
             
