@@ -68,8 +68,23 @@ class RemoteHomeCheckScorer:
         self.base_physical_score = 100
         self.base_mental_score = 100
         
-        # SMTP configuration for email
+        # SMTP configuration for email - FIXED: Use provided config or environment variables
+        if smtp_config is None:
+            # Fallback to environment variables if no config provided
+            smtp_config = {
+                "server": os.environ.get('SMTP_SERVER', ''),
+                "port": int(os.environ.get('SMTP_PORT', '587')),
+                "username": os.environ.get('SMTP_USERNAME', ''),
+                "password": os.environ.get('SMTP_PASSWORD', '')
+            }
         self.smtp_config = smtp_config
+        
+        # Debug SMTP configuration
+        print(f"🔧 SMTP Configuration:")
+        print(f"   Server: {self.smtp_config.get('server', 'NOT SET')}")
+        print(f"   Port: {self.smtp_config.get('port', 'NOT SET')}")
+        print(f"   Username: {self.smtp_config.get('username', 'NOT SET')}")
+        print(f"   Password: {'SET' if self.smtp_config.get('password') else 'NOT SET'}")
         
         # Data directory
         self.data_dir = data_dir
@@ -394,18 +409,27 @@ class RemoteHomeCheckScorer:
 
     def send_email(self, to_email, subject, body, attachment_paths=None):
         """Send an email with optional attachments"""
+        print(f" Attempting to send email to: {to_email}")
+        
+        # Check if SMTP is properly configured
         if not self.smtp_config or not all([self.smtp_config.get("server"), 
                                           self.smtp_config.get("port"),
                                           self.smtp_config.get("username"),
                                           self.smtp_config.get("password")]):
-            print("SMTP not configured. Email would be sent to:", to_email)
+            print(" SMTP not configured. Missing configuration:")
+            if not self.smtp_config.get("server"): print("   - SMTP_SERVER")
+            if not self.smtp_config.get("port"): print("   - SMTP_PORT")
+            if not self.smtp_config.get("username"): print("   - SMTP_USERNAME")
+            if not self.smtp_config.get("password"): print("   - SMTP_PASSWORD")
+            print("Email would be sent to:", to_email)
             print("Subject:", subject)
-            print("Body:", body)
             if attachment_paths:
                 print("Attachments:", attachment_paths)
-            return True
+            return False  # Changed from True to False to reflect actual status
             
         try:
+            print(f" SMTP configured, sending email via {self.smtp_config['server']}:{self.smtp_config['port']}")
+            
             msg = MIMEMultipart()
             msg['From'] = self.smtp_config["username"]
             msg['To'] = to_email
@@ -426,6 +450,7 @@ class RemoteHomeCheckScorer:
                             f"attachment; filename= {os.path.basename(file_path)}"
                         )
                         msg.attach(part)
+                        print(f"📎 Added attachment: {file_path}")
             
             server = smtplib.SMTP(self.smtp_config["server"], self.smtp_config["port"])
             server.starttls()
@@ -434,9 +459,10 @@ class RemoteHomeCheckScorer:
             server.sendmail(self.smtp_config["username"], to_email, text)
             server.quit()
             
+            print(f" Email sent successfully to {to_email}")
             return True
         except Exception as e:
-            print(f"Error sending email: {e}")
+            print(f" Error sending email: {e}")
             return False
 
     def process_assessment(self, assessment_data):
@@ -504,14 +530,33 @@ Remote Home Check Team
             return {"error": "Processing failed", "details": str(e)}
 
 
-# Initialize the Flask app and scorer
+# FIXED: Initialize with SMTP configuration from environment variables
+smtp_config = {
+    "server": os.environ.get('SMTP_SERVER', ''),
+    "port": int(os.environ.get('SMTP_PORT', '587')),
+    "username": os.environ.get('SMTP_USERNAME', ''),
+    "password": os.environ.get('SMTP_PASSWORD', '')
+}
+
 app = Flask(__name__)
-scorer = RemoteHomeCheckScorer()
+scorer = RemoteHomeCheckScorer(smtp_config=smtp_config)  # Pass SMTP config here
 
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "message": "Remote Home Check Scorer is running"})
+
+@app.route('/check-smtp', methods=['GET'])
+def check_smtp():
+    """Check SMTP configuration"""
+    smtp_status = {
+        "smtp_configured": bool(scorer.smtp_config and scorer.smtp_config.get("server") and scorer.smtp_config.get("username") and scorer.smtp_config.get("password")),
+        "smtp_server": scorer.smtp_config.get("server", "NOT SET"),
+        "smtp_port": scorer.smtp_config.get("port", "NOT SET"),
+        "smtp_username": scorer.smtp_config.get("username", "NOT SET"),
+        "smtp_password_set": bool(scorer.smtp_config.get("password"))
+    }
+    return jsonify(smtp_status)
 
 @app.route('/assess', methods=['POST'])
 def assess():
