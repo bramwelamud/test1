@@ -433,6 +433,9 @@ class RemoteHomeCheckScorer:
             msg['To'] = to_email
             msg['Subject'] = subject
             msg['Reply-To'] = "bramwelsavage@gmail.com"
+            msg['X-MC-Dkim'] = 'remotehomecheck.com'
+            msg['X-MC-SigningDomain'] = 'remotehomecheck.com'
+            msg['X-MC-Track'] = 'opens,clicks'
             
             msg.attach(MIMEText(body, 'plain'))
             
