@@ -12,6 +12,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 import uuid
 from flask import Flask, request, jsonify
+import io
 
 class RemoteHomeCheckScorer:
     def __init__(self, smtp_config=None, data_dir="data"):
@@ -336,7 +337,7 @@ class RemoteHomeCheckScorer:
         return filename
 
     def generate_pdf_in_memory(self, assessment_data, scores):
-        """Generate PDF in memory for Fly.io compatibility"""
+        """Generate PDF in memory for Fly.io compatibility - FIXED deprecated parameter"""
         try:
             patient = assessment_data.get("patient", {})
             responses = assessment_data.get("responses", {})
@@ -392,9 +393,12 @@ class RemoteHomeCheckScorer:
             suggestion = self.get_care_plan_suggestion(scores['tier'], patient.get('previous_tier'))
             pdf.multi_cell(0, 8, suggestion)
             
-            # Get PDF as bytes instead of saving to file
-            pdf_output = pdf.output(dest='S')
-            pdf_bytes = pdf_output.encode('latin-1')
+            # FIXED: Use BytesIO to get PDF as bytes without deprecated 'dest' parameter
+            pdf_buffer = io.BytesIO()
+            pdf_output = pdf.output()  # This returns bytes in newer versions
+            pdf_buffer.write(pdf_output)
+            pdf_bytes = pdf_buffer.getvalue()
+            pdf_buffer.close()
             
             print(f"PDF generated in memory ({len(pdf_bytes)} bytes)")
             return pdf_bytes
