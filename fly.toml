@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for test1-cal on 2025-10-02T19:27:55Z
+# fly.toml app configuration file generated for test1-4jutsg on 2025-10-04T07:05:23Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'test1-cal'
+app = 'test1-4jutsg'
 primary_region = 'cdg'
 
 [build]
