@@ -597,10 +597,10 @@ Remote Home Check Team
 
 # Initialize with SMTP configuration from environment variables
 smtp_config = {
-    "server": os.environ.get('SMTP_SERVER', ''),
+    "server": os.environ.get('SMTP_SERVER', 'smtp.mandrillapp.com'),
     "port": int(os.environ.get('SMTP_PORT', '587')),
-    "username": os.environ.get('SMTP_USERNAME', ''),
-    "password": os.environ.get('SMTP_PASSWORD', '')
+    "username": os.environ.get('SMTP_USERNAME', 'Remote Home Check'),
+    "password": os.environ.get('SMTP_PASSWORD', 'md-BvYTr9v9RGNaPTZNXm926w')
 }
 
 app = Flask(__name__)
