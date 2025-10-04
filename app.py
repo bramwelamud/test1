@@ -80,7 +80,7 @@ class RemoteHomeCheckScorer:
         self.smtp_config = smtp_config
         
         # Debug SMTP configuration
-        print(f"🔧 SMTP Configuration:")
+        print("SMTP Configuration:")
         print(f"   Server: {self.smtp_config.get('server', 'NOT SET')}")
         print(f"   Port: {self.smtp_config.get('port', 'NOT SET')}")
         print(f"   Username: {self.smtp_config.get('username', 'NOT SET')}")
@@ -335,21 +335,17 @@ class RemoteHomeCheckScorer:
         
         return filename
 
-    def generate_pdf(self, assessment_data, scores, filename=None):
-        """Generate a PDF report for the assessment"""
-        if filename is None:
-            assessment_id = assessment_data.get("assessment_id", str(uuid.uuid4()))
-            filename = f"{self.data_dir}/reports/{assessment_id}.pdf"
-        
-        patient = assessment_data.get("patient", {})
-        responses = assessment_data.get("responses", {})
-        
+    def generate_pdf_in_memory(self, assessment_data, scores):
+        """Generate PDF in memory for Fly.io compatibility"""
         try:
+            patient = assessment_data.get("patient", {})
+            responses = assessment_data.get("responses", {})
+            
             pdf = FPDF()
             pdf.add_page()
             
             # Set margins to ensure proper spacing
-            pdf.set_margins(20, 20, 20)  # Left, top, right margins
+            pdf.set_margins(20, 20, 20)
             pdf.set_auto_page_break(auto=True, margin=15)
             
             # Title
@@ -384,10 +380,8 @@ class RemoteHomeCheckScorer:
             for question in self.questions:
                 response = responses.get(question['name'], 'Not answered')
                 text = f"{question['label']}: {response}"
-                
-                # Handle long text by breaking into multiple lines
                 pdf.multi_cell(0, 8, text)
-                pdf.ln(2)  # Small space between questions
+                pdf.ln(2)
             
             pdf.ln(10)
             
@@ -396,39 +390,39 @@ class RemoteHomeCheckScorer:
             pdf.cell(0, 10, "Care Plan Suggestion", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             pdf.set_font("Helvetica", '', 12)
             suggestion = self.get_care_plan_suggestion(scores['tier'], patient.get('previous_tier'))
-            
-            # Handle potentially long care plan text
             pdf.multi_cell(0, 8, suggestion)
             
-            pdf.output(filename)
+            # Get PDF as bytes instead of saving to file
+            pdf_output = pdf.output(dest='S')
+            pdf_bytes = pdf_output.encode('latin-1')
+            
+            print(f"PDF generated in memory ({len(pdf_bytes)} bytes)")
+            return pdf_bytes
+            
         except Exception as e:
-            print(f"Error generating PDF: {e}")
-            raise
-        
-        return filename
+            print(f"Error generating PDF in memory: {e}")
+            return None
 
-    def send_email(self, to_email, subject, body, attachment_paths=None):
-        """Send an email with optional attachments"""
-        print(f" Attempting to send email to: {to_email}")
+    def send_email(self, to_email, subject, body, assessment_data=None, scores=None):
+        """Send an email with optional attachments - FIXED for Fly.io"""
+        print(f"Attempting to send email to: {to_email}")
         
         # Check if SMTP is properly configured
         if not self.smtp_config or not all([self.smtp_config.get("server"), 
                                           self.smtp_config.get("port"),
                                           self.smtp_config.get("username"),
                                           self.smtp_config.get("password")]):
-            print(" SMTP not configured. Missing configuration:")
+            print("SMTP not configured. Missing configuration:")
             if not self.smtp_config.get("server"): print("   - SMTP_SERVER")
             if not self.smtp_config.get("port"): print("   - SMTP_PORT")
             if not self.smtp_config.get("username"): print("   - SMTP_USERNAME")
             if not self.smtp_config.get("password"): print("   - SMTP_PASSWORD")
             print("Email would be sent to:", to_email)
             print("Subject:", subject)
-            if attachment_paths:
-                print("Attachments:", attachment_paths)
-            return False  # Changed from True to False to reflect actual status
+            return False
             
         try:
-            print(f" SMTP configured, sending email via {self.smtp_config['server']}:{self.smtp_config['port']}")
+            print(f"SMTP configured, sending email via {self.smtp_config['server']}:{self.smtp_config['port']}")
             
             msg = MIMEMultipart()
             msg['From'] = self.smtp_config["username"]
@@ -437,20 +431,19 @@ class RemoteHomeCheckScorer:
             
             msg.attach(MIMEText(body, 'plain'))
             
-            if attachment_paths:
-                for file_path in attachment_paths:
-                    if os.path.exists(file_path):
-                        with open(file_path, "rb") as attachment:
-                            part = MIMEBase('application', 'octet-stream')
-                            part.set_payload(attachment.read())
-                        
-                        encoders.encode_base64(part)
-                        part.add_header(
-                            'Content-Disposition',
-                            f"attachment; filename= {os.path.basename(file_path)}"
-                        )
-                        msg.attach(part)
-                        print(f"📎 Added attachment: {file_path}")
+            # Generate PDF in memory and attach it
+            if assessment_data and scores:
+                pdf_bytes = self.generate_pdf_in_memory(assessment_data, scores)
+                if pdf_bytes:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(pdf_bytes)
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        'Content-Disposition',
+                        'attachment; filename="health_assessment_report.pdf"'
+                    )
+                    msg.attach(part)
+                    print("PDF generated in memory and attached")
             
             server = smtplib.SMTP(self.smtp_config["server"], self.smtp_config["port"])
             server.starttls()
@@ -459,10 +452,10 @@ class RemoteHomeCheckScorer:
             server.sendmail(self.smtp_config["username"], to_email, text)
             server.quit()
             
-            print(f" Email sent successfully to {to_email}")
+            print(f"Email sent successfully to {to_email}")
             return True
         except Exception as e:
-            print(f" Error sending email: {e}")
+            print(f"Error sending email: {e}")
             return False
 
     def process_assessment(self, assessment_data):
@@ -491,10 +484,10 @@ class RemoteHomeCheckScorer:
             json_file = self.save_assessment_json(assessment_data, scores)
             csv_file = self.save_to_csv(assessment_data, scores)
             
-            # Generate PDF
+            # Generate PDF (still save locally for backup, but use in-memory for email)
             pdf_file = self.generate_pdf(assessment_data, scores)
             
-            # Send email
+            # Send email with in-memory PDF attachment
             subject = "Remote Home Check Assessment Results"
             body = f"""Dear {patient.get('name', 'User')},
 
@@ -516,7 +509,7 @@ Best regards,
 Remote Home Check Team
 """
             
-            email_sent = self.send_email(email, subject, body, [pdf_file])
+            email_sent = self.send_email(email, subject, body, assessment_data, scores)
             
             return {
                 "success": True,
@@ -529,8 +522,76 @@ Remote Home Check Team
         except Exception as e:
             return {"error": "Processing failed", "details": str(e)}
 
+    def generate_pdf(self, assessment_data, scores, filename=None):
+        """Generate a PDF report for the assessment - kept for local saving"""
+        if filename is None:
+            assessment_id = assessment_data.get("assessment_id", str(uuid.uuid4()))
+            filename = f"{self.data_dir}/reports/{assessment_id}.pdf"
+        
+        patient = assessment_data.get("patient", {})
+        responses = assessment_data.get("responses", {})
+        
+        try:
+            pdf = FPDF()
+            pdf.add_page()
+            
+            # Set margins to ensure proper spacing
+            pdf.set_margins(20, 20, 20)
+            pdf.set_auto_page_break(auto=True, margin=15)
+            
+            # Title
+            pdf.set_font("Helvetica", 'B', 16)
+            pdf.cell(0, 10, "Remote Home Check Assessment Report", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+            pdf.ln(10)
+            
+            # Patient information
+            pdf.set_font("Helvetica", 'B', 12)
+            pdf.cell(0, 10, f"Patient: {patient.get('name', 'N/A')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(0, 10, f"Email: {patient.get('email', 'N/A')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(0, 10, f"Age: {patient.get('age', 'N/A')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(0, 10, f"Assessment Date: {assessment_data.get('timestamp', 'N/A')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(0, 10, f"Previous Tier: {patient.get('previous_tier', 'N/A')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.ln(10)
+            
+            # Scores
+            pdf.set_font("Helvetica", 'B', 14)
+            pdf.cell(0, 10, "Assessment Scores", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_font("Helvetica", '', 12)
+            pdf.cell(0, 10, f"Physical Health Score: {scores['physical_score']:.1f}/100", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(0, 10, f"Mental Health Score: {scores['mental_score']:.1f}/100", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(0, 10, f"Insight Score: {scores['insight_score']:.1f}/100", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(0, 10, f"Tier: {scores['tier']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.ln(10)
+            
+            # Risk factors
+            pdf.set_font("Helvetica", 'B', 14)
+            pdf.cell(0, 10, "Assessment Responses", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_font("Helvetica", '', 12)
+            
+            for question in self.questions:
+                response = responses.get(question['name'], 'Not answered')
+                text = f"{question['label']}: {response}"
+                pdf.multi_cell(0, 8, text)
+                pdf.ln(2)
+            
+            pdf.ln(10)
+            
+            # Care plan suggestion
+            pdf.set_font("Helvetica", 'B', 14)
+            pdf.cell(0, 10, "Care Plan Suggestion", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_font("Helvetica", '', 12)
+            suggestion = self.get_care_plan_suggestion(scores['tier'], patient.get('previous_tier'))
+            pdf.multi_cell(0, 8, suggestion)
+            
+            pdf.output(filename)
+        except Exception as e:
+            print(f"Error generating PDF: {e}")
+            raise
+        
+        return filename
 
-# FIXED: Initialize with SMTP configuration from environment variables
+
+# Initialize with SMTP configuration from environment variables
 smtp_config = {
     "server": os.environ.get('SMTP_SERVER', ''),
     "port": int(os.environ.get('SMTP_PORT', '587')),
@@ -539,7 +600,7 @@ smtp_config = {
 }
 
 app = Flask(__name__)
-scorer = RemoteHomeCheckScorer(smtp_config=smtp_config)  # Pass SMTP config here
+scorer = RemoteHomeCheckScorer(smtp_config=smtp_config)
 
 @app.route('/health', methods=['GET'])
 def health_check():
