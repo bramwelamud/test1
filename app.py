@@ -429,7 +429,7 @@ class RemoteHomeCheckScorer:
             print(f"SMTP configured, sending email via {self.smtp_config['server']}:{self.smtp_config['port']}")
             
             msg = MIMEMultipart()
-            msg['From'] = self.smtp_config["username"]
+            msg['From'] = "bram@remotehomecheck.com"
             msg['To'] = to_email
             msg['Subject'] = subject
             
