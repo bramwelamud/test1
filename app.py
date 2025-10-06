@@ -13,6 +13,7 @@ from email import encoders
 import uuid
 from flask import Flask, request, jsonify
 import io
+from flask_cors import CORS
 
 class RemoteHomeCheckScorer:
     def __init__(self, smtp_config=None, data_dir="data"):
@@ -608,6 +609,9 @@ smtp_config = {
 }
 
 app = Flask(__name__)
+
+CORS(app)
+
 scorer = RemoteHomeCheckScorer(smtp_config=smtp_config)
 
 @app.route('/health', methods=['GET'])
